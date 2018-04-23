@@ -118,8 +118,9 @@ function configureViewport(width, height, page) {
 }
 
 let mochaStdOutMsg = '';
+let mochaOutCache = {};
 
-function handleConsole(msg) {
+function handleConsole(msg, file) {
     const args = msg._args;
 
     Promise.all(args.map(a => a.jsonValue()))
@@ -132,7 +133,7 @@ function handleConsole(msg) {
             let msg = util.format(...args);
 
             !isStdout && (msg += '\n');
-            isMochaStdout && (mochaStdOutMsg += util.format(...args));
+            isMochaStdout && (mochaOutCache[file] += util.format(...args));
 
             process.stdout.write(msg);
         });
@@ -174,9 +175,10 @@ module.exports = function ({ file, reporter, mochaout, timeout, width, height, a
             .then(browser => browser.newPage()
                 .then(configureViewport.bind(this, width, height))
                 .then(page => {
-                    page.on('console', (msg) => handleConsole(msg));
+                    page.on('console', (msg) => handleConsole(msg, file));
                     page.on('dialog', dialog => dialog.dismiss());
                     page.on('pageerror', err => console.error(err));
+                    mochaOutCache[file] = '';
 
                     return page.evaluateOnNewDocument(initMocha, reporter)
                         .then(() => page.goto(url))
@@ -187,8 +189,10 @@ module.exports = function ({ file, reporter, mochaout, timeout, width, height, a
 
                             if (mochaout) {
                               mkdirp.sync(path.dirname(mochaout));
-                              fs.writeFileSync(mochaout, mochaStdOutMsg);
+                              fs.writeFileSync(mochaout, mochaOutCache[file]);
                             }
+
+                            mochaOutCache[file] = null;
                             return obj;
                         });
                 }));
